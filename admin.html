@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Invite Admin — Sana &amp; Zohaib</title>
+<meta name="robots" content="noindex, nofollow" />
+<style>
+  :root{--ink:#0a1713;--gold:#c9a44c;--gold-hi:#f3e3b3;--cream:#f6efe2;--cream-dim:#c8beac}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--ink);
+    color:var(--cream);font-family:Georgia,'Times New Roman',serif;padding:24px}
+  .box{width:100%;max-width:420px;border:1px solid rgba(201,164,76,.35);padding:32px 26px;
+    background:rgba(246,239,226,.04)}
+  h1{font-size:19px;font-weight:400;letter-spacing:.04em;margin:0 0 4px;color:var(--gold-hi)}
+  p.sub{margin:0 0 22px;font-size:14px;color:var(--cream-dim);font-style:italic}
+  label{display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a08c4a;margin:16px 0 6px}
+  input{width:100%;background:rgba(0,0,0,.25);border:1px solid rgba(201,164,76,.35);color:var(--cream);
+    font-family:inherit;font-size:15px;padding:11px 12px;border-radius:2px}
+  input:focus{outline:none;border-color:var(--gold)}
+  button{margin-top:20px;width:100%;padding:12px;border:1px solid var(--gold);background:linear-gradient(180deg,#d8b45c,#a8862f);
+    color:#20190a;font-family:inherit;font-size:14px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;border-radius:2px}
+  button:disabled{opacity:.5;cursor:default}
+  .msg{margin-top:16px;font-size:14px;min-height:20px}
+  .msg.err{color:#e0897f}
+  .msg.ok{color:#9fd6b0}
+  .result{margin-top:14px;display:none;gap:8px}
+  .result input{flex:1;font-size:13px}
+  .result{display:none;align-items:stretch;gap:8px}
+  .result.show{display:flex}
+  .copybtn{margin:0;width:auto;padding:0 16px;white-space:nowrap}
+  .list{margin-top:34px;border-top:1px solid rgba(201,164,76,.2);padding-top:18px}
+  .list h2{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:#a08c4a;margin:0 0 10px;font-weight:400}
+  .row{display:flex;justify-content:space-between;gap:10px;font-size:14px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+  .row span:first-child{color:var(--cream)}
+  .row a{color:var(--gold);text-decoration:none;font-size:12px}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>Invite Link Generator</h1>
+  <p class="sub">Host access only — generates one personalized, non-editable link per guest.</p>
+
+  <label for="pw">Admin password</label>
+  <input id="pw" type="password" autocomplete="current-password" placeholder="••••••••" />
+
+  <label for="name">Guest name</label>
+  <input id="name" type="text" placeholder="e.g. Sana &amp; Family" />
+
+  <button id="go">Generate link</button>
+  <div class="msg" id="msg"></div>
+
+  <div class="result" id="result">
+    <input id="link" type="text" readonly />
+    <button class="copybtn" id="copy">Copy</button>
+  </div>
+
+  <div class="list" id="history" hidden>
+    <h2>This session</h2>
+    <div id="historyRows"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var goBtn = document.getElementById("go");
+  var msg = document.getElementById("msg");
+  var result = document.getElementById("result");
+  var linkInput = document.getElementById("link");
+  var history = [];
+
+  function setMsg(text, cls){
+    msg.textContent = text || "";
+    msg.className = "msg" + (cls ? " " + cls : "");
+  }
+
+  function renderHistory(){
+    if(!history.length) return;
+    document.getElementById("history").hidden = false;
+    var rows = document.getElementById("historyRows");
+    rows.innerHTML = "";
+    history.slice().reverse().forEach(function(item){
+      var row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = '<span>' + item.name.replace(/[<>]/g,"") + '</span><a href="' + item.url + '" target="_blank" rel="noopener">open</a>';
+      rows.appendChild(row);
+    });
+  }
+
+  goBtn.addEventListener("click", function(){
+    var password = document.getElementById("pw").value;
+    var guestName = document.getElementById("name").value.trim();
+
+    if(!password){ setMsg("Enter the admin password.", "err"); return; }
+    if(!guestName){ setMsg("Enter a guest name.", "err"); return; }
+
+    goBtn.disabled = true;
+    setMsg("Generating…");
+    result.classList.remove("show");
+
+    fetch("/.netlify/functions/create-invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: password, guestName: guestName })
+    })
+    .then(function(r){ return r.json().then(function(data){ return { ok: r.ok, data: data }; }); })
+    .then(function(res){
+      goBtn.disabled = false;
+      if(!res.ok){
+        setMsg(res.data && res.data.error ? res.data.error : "Something went wrong.", "err");
+        return;
+      }
+      setMsg("Link created for " + guestName + ".", "ok");
+      linkInput.value = res.data.url;
+      result.classList.add("show");
+      history.push({ name: guestName, url: res.data.url });
+      renderHistory();
+      document.getElementById("name").value = "";
+      document.getElementById("name").focus();
+    })
+    .catch(function(){
+      goBtn.disabled = false;
+      setMsg("Network error — try again.", "err");
+    });
+  });
+
+  document.getElementById("copy").addEventListener("click", function(){
+    linkInput.select();
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(linkInput.value).then(function(){ setMsg("Copied to clipboard.", "ok"); });
+    } else {
+      document.execCommand("copy");
+    }
+  });
+
+  document.getElementById("name").addEventListener("keydown", function(e){
+    if(e.key === "Enter") goBtn.click();
+  });
+})();
+</script>
+</body>
+</html>
