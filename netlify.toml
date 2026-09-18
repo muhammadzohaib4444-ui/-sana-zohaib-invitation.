@@ -1,0 +1,16 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+# /invite/TOKEN  →  index.html, with the token passed through as ?invite=TOKEN
+# (the token itself still lives only in the path/query — the *name* is never
+# in the URL; it's resolved server-side by get-invite.js)
+[[redirects]]
+  from = "/invite/*"
+  to = "/index.html?invite=:splat"
+  status = 200
+
+[[redirects]]
+  from = "/admin"
+  to = "/admin.html"
+  status = 200
